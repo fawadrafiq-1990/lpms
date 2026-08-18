@@ -1,0 +1,183 @@
+# Production Environment Configuration
+# LPMS Backend - Security Hardened Settings
+# ==========================================
+
+server:
+  port: ${SERVER_PORT:8080}
+  servlet:
+    context-path: /api
+  ssl:
+    enabled: ${SSL_ENABLED:false}
+    key-store: ${SSL_KEY_STORE:classpath:keystore.p12}
+    key-store-password: ${SSL_KEY_STORE_PASSWORD:changeit}
+    key-store-type: PKCS12
+    key-alias: ${SSL_KEY_ALIAS:lpms-backend}
+  forward-headers-strategy: native
+  tomcat:
+    connection-timeout: 20000
+    max-connections: 10000
+    accept-count: 100
+    threads:
+      max: 200
+      min-spare: 10
+    keep-alive-timeout: 20000
+
+spring:
+  application:
+    name: legal-management-system
+
+  # Production Database Configuration
+  datasource:
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:lpms}?useSSL=true&requireSSL=true&allowPublicKeyRetrieval=true&serverTimezone=UTC&characterEncoding=UTF-8&ssl-mode=REQUIRED
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      minimum-idle: 10
+      maximum-pool-size: 50
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      connection-timeout: 20000
+      leak-detection-threshold: 60000
+      validation-timeout: 3000
+
+  # Production Redis Configuration
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: ${REDIS_DATABASE:0}
+      timeout: 10000ms
+      lettuce:
+        pool:
+          max-active: 50
+          max-idle: 25
+          min-idle: 10
+          max-wait: 5000ms
+
+  # Production Elasticsearch Configuration
+  elasticsearch:
+    connection-timeout: 10s
+    socket-timeout: 60s
+
+  # Production Flyway Configuration
+  flyway:
+    baseline-on-migrate: true
+    validate-on-migrate: true
+    clean-disabled: true
+
+  # Production Kafka Configuration
+  kafka:
+    consumer:
+      properties:
+        spring.json.trusted.packages: "*"
+    producer:
+      properties:
+        spring.json.trusted.packages: "*"
+
+  # Production File Upload Limits
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 100MB
+
+# Production Actuator Configuration
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: never
+      show-components: always
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+  security:
+    user:
+      name: ${ACTUATOR_USERNAME:admin}
+      password: ${ACTUATOR_PASSWORD:change-me-in-production}
+  health:
+    db:
+      enabled: true
+    redis:
+      enabled: true
+    disk:
+      enabled: true
+  info:
+    env:
+      enabled: true
+
+# Production Security Configuration
+app:
+  jwt:
+    secret: ${JWT_SECRET:CHANGE_THIS_IN_PRODUCTION_USE_STRONG_SECRET}
+    expiration: 3600000
+    refresh-expiration: 86400000
+    issuer: ${JWT_ISSUER:LPMS-Production}
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:https://your-production-domain.com,https://app.your-domain.com}
+    allowed-methods: GET,POST,PUT,PATCH,DELETE,OPTIONS
+    allowed-headers: Authorization,Content-Type,X-Requested-With,Accept,X-CSRF-TOKEN
+    exposed-headers: Authorization,X-RateLimit-Limit,X-RateLimit-Remaining,X-RateLimit-Reset
+    allow-credentials: true
+    max-age: 3600
+  rate-limit:
+    enabled: true
+    requests-per-minute: 60
+    burst-capacity: 100
+    window-ms: 60000
+    whitelist-ips: ${RATE_LIMIT_WHITELIST:10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
+    bypass-authenticated: false
+  security:
+    allow-credentials: true
+    session-timeout: 15
+    password:
+      min-length: 14
+      require-uppercase: true
+      require-lowercase: true
+      require-number: true
+      require-special: true
+      check-common-passwords: true
+    account:
+      max-failed-attempts: 3
+      lockout-duration: 1800000
+    mfa:
+      enabled: true
+      issuer: LPMS-Production
+  logging:
+    level:
+      root: WARN
+      com.company.legal: INFO
+      org.springframework.security: WARN
+      org.springframework.web: WARN
+      org.hibernate: WARN
+      org.springframework.data.redis: WARN
+    security-events:
+      enabled: true
+      log-authentication-success: true
+      log-authentication-failure: true
+      log-authorization-failure: true
+      log-rate-limit-exceeded: true
+
+# OpenAPI/Swagger Configuration
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+    enabled: ${ENABLE_API_DOCS:false}
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: ${ENABLE_SWAGGER:false}
+
+# Security Headers Configuration
+security:
+  headers:
+    x-frame-options: DENY
+    x-content-type-options: nosniff
+    x-xss-protection: 1; mode=block
+    strict-transport-security: max-age=31536000; includeSubDomains; preload
+    content-security-policy: default-src 'self'
+    referrer-policy: strict-origin-when-cross-origin
+    permissions-policy: geolocation=(), microphone=(), camera=()

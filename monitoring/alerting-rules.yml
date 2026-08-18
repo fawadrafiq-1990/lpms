@@ -1,0 +1,279 @@
+# Alerting Rules for Legal Practice Management System (LPMS)
+#
+# Designed for Prometheus Alertmanager integration.
+# Defines thresholds for system health, application performance,
+# and business operations.
+#
+# File: alerting-rules.yml
+# Include in prometheus.yml under rule_files:
+#   rule_files:
+#     - 'alerting-rules.yml'
+#
+# Evaluation: every 15s (see scrape_configs.evaluation_interval)
+
+groups:
+  - name: lpms.system.alerts
+    interval: 15s
+    rules:
+      # ------------------------------------------------------------------
+      # HIGH CPU USAGE
+      # Warning: CPU consistently above 80% for 5 minutes
+      # Critical: CPU consistently above 95% for 2 minutes
+      # ------------------------------------------------------------------
+      - alert: HighCpuUsage
+        expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+          team: infrastructure
+        annotations:
+          summary: "High CPU usage on {{ $labels.instance }}"
+          description: "CPU usage is above 80% (currently {{ $value | printf \"%.1f\" }}%) for more than 5 minutes. Instance: {{ $labels.instance }}. Check for runaway processes or excessive load."
+
+      - alert: CriticalCpuUsage
+        expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[2m])) * 100) > 95
+        for: 2m
+        labels:
+          severity: critical
+          team: infrastructure
+        annotations:
+          summary: "Critical CPU usage on {{ $labels.instance }}"
+          description: "CPU usage is above 95% (currently {{ $value | printf \"%.1f\" }}%) for more than 2 minutes. Instance: {{ $labels.instance }}. Immediate investigation required."
+
+      # ------------------------------------------------------------------
+      # MEMORY EXHAUSTION
+      # Warning: Heap usage above 85% for 10 minutes
+      # Critical: Heap usage above 95% for 5 minutes
+      # ------------------------------------------------------------------
+      - alert: HighMemoryUsage
+        expr: (jvm_memory_used_bytes{area="heap"} / jvm_memory_max_bytes{area="heap"}) * 100 > 85
+        for: 10m
+        labels:
+          severity: warning
+          team: infrastructure
+        annotations:
+          summary: "High JVM heap usage on {{ $labels.instance }}"
+          description: "JVM heap usage is above 85% (currently {{ $value | printf \"%.1f\" }}%). Instance: {{ $labels.instance }}, JVM: {{ $labels.id }}. Consider increasing heap size or investigating memory leaks."
+
+      - alert: CriticalMemoryUsage
+        expr: (jvm_memory_used_bytes{area="heap"} / jvm_memory_max_bytes{area="heap"}) * 100 > 95
+        for: 5m
+        labels:
+          severity: critical
+          team: infrastructure
+        annotations:
+          summary: "Critical JVM heap usage on {{ $labels.instance }}"
+          description: "JVM heap usage is above 95% (currently {{ $value | printf \"%.1f\" }}%). Instance: {{ $labels.instance }}, JVM: {{ $labels.id }}. OutOfMemoryError imminent."
+
+      - alert: MemoryExhaustionImminent
+        expr: process_resident_memory_bytes / 1024 / 1024 > (system_memory_bytes / 1024 / 1024) * 0.9
+        for: 3m
+        labels:
+          severity: critical
+          team: infrastructure
+        annotations:
+          summary: "OS memory exhaustion imminent on {{ $labels.instance }}"
+          description: "Process resident memory is consuming >90% of available OS memory. Risk of OOM killer invoking."
+
+  - name: lpms.database.alerts
+    interval: 15s
+    rules:
+      # ------------------------------------------------------------------
+      # DATABASE CONNECTION ISSUES
+      # Warning: Active connections above 80% of pool max
+      # Critical: All connections in use + threads waiting
+      # ------------------------------------------------------------------
+      - alert: DatabaseConnectionPoolExhaustionWarning
+        expr: |
+          hikaricp_connections_active / hikaricp_connections_max * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          team: infrastructure
+        annotations:
+          summary: "Database connection pool nearing exhaustion"
+          description: "HikariCP pool active connections at {{ $value | printf \"%.1f\" }}% of max ({{ $value | printf \"%.0f\" }}/20). Instance: {{ $labels.instance }}. Potential connection leak or high query load."
+
+      - alert: DatabaseConnectionPoolExhaustionCritical
+        expr: hikaricp_connections_active >= hikaricp_connections_max
+        for: 2m
+        labels:
+          severity: critical
+          team: infrastructure
+        annotations:
+          summary: "Database connection pool exhausted"
+          description: "All {{ $value }} database connections are in use. New queries will block. Instance: {{ $labels.instance }}. Check for long-running queries or connection leaks."
+
+      - alert: DatabaseConnectionPoolThreadsWaiting
+        expr: hikaricp_threads_awaiting > 10
+        for: 2m
+        labels:
+          severity: critical
+          team: infrastructure
+        annotations:
+          summary: "Database connection pool threads waiting"
+          description: "{{ $value }} threads are waiting for a database connection. Requests will experience severe delays. Instance: {{ $labels.instance }}."
+
+      - alert: DatabaseSlowQueries
+        expr: |
+          rate(hibernate_statements_total[5m]) > 0 and
+          histogram_quantile(0.95, rate(hibernate_statement_duration_milliseconds_bucket[5m])) > 1000
+        for: 5m
+        labels:
+          severity: warning
+          team: application
+        annotations:
+          summary: "Slow Hibernate queries detected"
+          description: "95th percentile query duration is above 1000ms (currently {{ $value | printf \"%.0f\" }}ms). Check for missing indexes or N+1 queries."
+
+  - name: lpms.kafka.alerts
+    interval: 15s
+    rules:
+      # ------------------------------------------------------------------
+      # KAFKA CONSUMER LAG
+      # Warning: Lag exceeds 10,000 messages for 5 minutes
+      # Critical: Lag exceeds 50,000 messages for 5 minutes
+      # ------------------------------------------------------------------
+      - alert: KafkaConsumerLagHigh
+        expr: |
+          sum by(group_id, topic) (
+            kafka_consumer_group_lag
+          ) > 10000
+        for: 5m
+        labels:
+          severity: warning
+          team: infrastructure
+        annotations:
+          summary: "Kafka consumer lag is high"
+          description: "Consumer group {{ $labels.group_id }} is lagging on topic {{ $labels.topic }} by {{ $value | printf \"%.0f\" }} messages. Processing may be falling behind."
+
+      - alert: KafkaConsumerLagCritical
+        expr: |
+          sum by(group_id, topic) (
+            kafka_consumer_group_lag
+          ) > 50000
+        for: 5m
+        labels:
+          severity: critical
+          team: infrastructure
+        annotations:
+          summary: "Kafka consumer lag is critical"
+          description: "Consumer group {{ $labels.group_id }} is lagging on topic {{ $labels.topic }} by {{ $value | printf \"%.0f\" }} messages. Immediate scaling of consumers recommended."
+
+      - alert: KafkaProducerFailureRate
+        expr: |
+          rate(kafka_producer_record_send_total{error!="none"}[5m]) /
+          rate(kafka_producer_record_send_total[5m]) * 100 > 5
+        for: 5m
+        labels:
+          severity: warning
+          team: infrastructure
+        annotations:
+          summary: "Kafka producer error rate high"
+          description: "Kafka producer error rate is above 5% (currently {{ $value | printf \"%.1f\" }}%). Messages may be failing to send."
+
+  - name: lpms.application.alerts
+    interval: 15s
+    rules:
+      # ------------------------------------------------------------------
+      # HIGH ERROR RATE
+      # Warning: HTTP 5xx rate above 5% for 5 minutes
+      # Critical: HTTP 5xx rate above 15% for 2 minutes
+      # ------------------------------------------------------------------
+      - alert: HighHttpErrorRate
+        expr: |
+          sum(rate(http_server_requests_seconds_count{status=~"5.."}[5m])) by (job) /
+          sum(rate(http_server_requests_seconds_count[5m])) by (job) * 100 > 5
+        for: 5m
+        labels:
+          severity: warning
+          team: application
+        annotations:
+          summary: "High HTTP 5xx error rate"
+          description: "HTTP 5xx error rate is above 5% (currently {{ $value | printf \"%.1f\" }}%) for job {{ $labels.job }}. Check application logs for stack traces."
+
+      - alert: CriticalHttpErrorRate
+        expr: |
+          sum(rate(http_server_requests_seconds_count{status=~"5.."}[2m])) by (job) /
+          sum(rate(http_server_requests_seconds_count[2m])) by (job) * 100 > 15
+        for: 2m
+        labels:
+          severity: critical
+          team: application
+        annotations:
+          summary: "Critical HTTP 5xx error rate"
+          description: "HTTP 5xx error rate is above 15% (currently {{ $value | printf \"%.1f\" }}%). Service may be degraded. Immediate investigation required."
+
+      # ------------------------------------------------------------------
+      # SLOW RESPONSE TIMES
+      # Warning: p95 latency above 2 seconds
+      # Critical: p95 latency above 5 seconds
+      # ------------------------------------------------------------------
+      - alert: HighResponseLatency
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(http_server_requests_seconds_bucket[5m]))
+            by (le, method, uri)
+          ) > 2
+        for: 5m
+        labels:
+          severity: warning
+          team: application
+        annotations:
+          summary: "High response latency for {{ $labels.method }} {{ $labels.uri }}"
+          description: "95th percentile latency is above 2s (currently {{ $value | printf \"%.2f\" }}s). Method: {{ $labels.method }}, URI: {{ $labels.uri }}. Check downstream dependencies and query performance."
+
+      - alert: CriticalResponseLatency
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(http_server_requests_seconds_bucket[2m]))
+            by (le, method, uri)
+          ) > 5
+        for: 2m
+        labels:
+          severity: critical
+          team: application
+        annotations:
+          summary: "Critical response latency for {{ $labels.method }} {{ $labels.uri }}"
+          description: "95th percentile latency is above 5s (currently {{ $value | printf \"%.2f\" }}s). Users experiencing severe degradation."
+
+      # ------------------------------------------------------------------
+      # SERVICE AVAILABILITY
+      # Warning: Service unavailable (down)
+      # ------------------------------------------------------------------
+      - alert: ServiceDown
+        expr: up{job="lpms-backend"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: application
+        annotations:
+          summary: "LPMS backend service is down"
+          description: "The LPMS backend has been unreachable for more than 1 minute. Instance: {{ $labels.instance }}. Check if the process is running and the port is accessible."
+
+      # ------------------------------------------------------------------
+      # BUSINESS METRIC ALERTS
+      # ------------------------------------------------------------------
+      - alert: AuthFailureRateHigh
+        expr: |
+          sum(rate(lpms_auth_login_failure_total[5m])) by (job) /
+          (sum(rate(lpms_auth_login_failure_total[5m])) by (job) +
+           sum(rate(lpms_auth_login_success_total[5m])) by (job)) * 100 > 20
+        for: 5m
+        labels:
+          severity: warning
+          team: security
+        annotations:
+          summary: "Authentication failure rate high"
+          description: "Auth failure rate is above 20% (currently {{ $value | printf \"%.1f\" }}%). Possible brute-force attack or misconfigured client."
+
+      - alert: KafkaMessageProcessingFailures
+        expr: |
+          sum(rate(lpms_kafka_messages_failed_total[5m])) by (job) > 10
+        for: 5m
+        labels:
+          severity: warning
+          team: application
+        annotations:
+          summary: "Kafka message processing failures"
+          description: "Kafka messages are failing to process at a rate of {{ $value | printf \"%.1f\" }}/sec. Check consumer error logs."

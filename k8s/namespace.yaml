@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: lpms
+  labels:
+    name: lpms
+    environment: production
+    app.kubernetes.io/name: lpms
+    app.kubernetes.io/component: legal-practice-management-system

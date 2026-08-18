@@ -1,0 +1,75 @@
+# Compiled Java files
+**/*.class
+**/*.jar
+**/*.war
+**/*.ear
+
+# Maven
+target/
+!.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+# IDE specific files
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.vscode-test/
+*.swp
+*.swo
+.DS_Store
+
+# Node and npm
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+.yarn
+
+# Frontend build
+frontend/dist/
+frontend/.vite/
+
+# Logs
+*.log
+logs/
+**/logs/
+
+# Environment files (keep .env.example)
+.env
+.env.local
+.env.*.local
+
+# Database
+*.db
+*.sqlite
+*.h2.db
+
+# Testing
+coverage/
+.nyc_output/
+*.lcov
+
+# Generated files
+**/generated/
+
+# Docker
+docker-compose.override.yml
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# Secrets and credentials
+*.p12
+*.pfx
+*.jks
+keystore
+
+# Terraform
+*.tfstate
+*.tfstate.backup
+.terraform/

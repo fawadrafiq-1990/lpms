@@ -1,0 +1,315 @@
+server:
+  port: ${SERVER_PORT:8080}
+  servlet:
+    context-path: /api
+  compression:
+    enabled: true
+    mime-types: application/json,application/xml,text/html,text/xml,text/plain
+    min-response-size: 1024
+
+spring:
+  application:
+    name: legal-management-system
+
+  # Database Configuration
+  datasource:
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:lpms}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&characterEncoding=UTF-8
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:password}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      minimum-idle: 5
+      maximum-pool-size: 20
+      idle-timeout: 300000
+      max-lifetime: 1200000
+      connection-timeout: 30000
+      pool-name: LegalHikariCP
+
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        format_sql: true
+        use_sql_comments: true
+        jdbc:
+          batch_size: 50
+        order_inserts: true
+        order_updates: true
+
+  # Flyway Configuration
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    validate-on-migrate: true
+    # Disable FK checks for the migration run so V8 (which seeds lawyers/cases
+    # referencing users/firm) can apply before V13 creates those base rows on a
+    # fresh database. Checks are re-enabled by MySQL after the run; V13 is
+    # idempotent so this is a no-op on an already-seeded database.
+    init-sql: SET FOREIGN_KEY_CHECKS=0;
+
+  # Redis Configuration
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: ${REDIS_DATABASE:0}
+      timeout: 5000ms
+      lettuce:
+        pool:
+          max-active: 10
+          max-idle: 5
+          min-idle: 2
+          max-wait: 3000ms
+
+  # Elasticsearch Configuration
+  elasticsearch:
+    repositories:
+      enabled: true
+    uris: ${ELASTICSEARCH_URIS:http://localhost:9200}
+    username: ${ELASTICSEARCH_USERNAME:}
+    password: ${ELASTICSEARCH_PASSWORD:}
+    connection-timeout: 5s
+    socket-timeout: 30s
+
+  # Kafka Configuration
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: ${KAFKA_GROUP_ID:lpms-group}
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+
+  # File Upload Configuration
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 100MB
+      max-request-size: 100MB
+      file-size-threshold: 2KB
+
+  # Mail Configuration
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
+
+  # Jackson Configuration
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+      fail-on-empty-beans: false
+    deserialization:
+      fail-on-unknown-properties: false
+    default-property-inclusion: non_null
+    date-format: yyyy-MM-dd'T'HH:mm:ss.SSSXXX
+
+# ============================================================
+# Actuator & Monitoring Configuration
+# ============================================================
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,threaddump,heapdump,logfile,loggers
+      base-path: /actuator
+      path-mapping:
+        prometheus: prometheus
+  endpoint:
+    health:
+      show-details: when_authorized
+      show-components: always
+      group:
+        readiness:
+          include: db,redis
+        liveness:
+          include: db
+      probes:
+        enabled: true
+      enabled: true
+    metrics:
+      enabled: true
+    prometheus:
+      enabled: true
+    logfile:
+      enabled: true
+      external-file: /var/log/lpms/application.log
+    loggers:
+      enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+      environment: ${spring.profiles.active:default}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+      percentiles:
+        http.server.requests: 0.5,0.95,0.99
+      sla:
+        http.server.requests: 100ms,500ms,1s,2s,5s
+      max-expected-value:
+        http.server.requests: 30s
+    export:
+      prometheus:
+        enabled: true
+        descriptions: true
+  tracing:
+    enabled: ${APP_TRACING_ENABLED:false}
+    sampling:
+      probability: ${APP_TRACING_SAMPLING_RATIO:0.1}
+    propagation:
+      type: b3,w3c
+
+# ============================================================
+# Application-specific Configuration
+# ============================================================
+app:
+  # Health Indicators
+  health:
+    database:
+      enabled: true
+      query-timeout: 5s
+    redis:
+      enabled: true
+      slow-threshold-ms: 2000
+    kafka:
+      enabled: ${APP_KAFKA_HEALTH_ENABLED:false}
+      timeout: 5s
+    elasticsearch:
+      enabled: ${APP_ELASTICSEARCH_HEALTH_ENABLED:false}
+      timeout: 5s
+
+  # Tracing Configuration
+  tracing:
+    enabled: ${APP_TRACING_ENABLED:false}
+    sampling:
+      ratio: ${APP_TRACING_SAMPLING_RATIO:0.1}
+    zipkin:
+      endpoint: ${APP_TRACING_ZIPKIN_ENDPOINT:}
+
+  # JWT Configuration
+  jwt:
+    secret: ${JWT_SECRET:your-256-bit-secret-key-here-must-be-at-least-32-characters-long}
+    expiration: 86400000
+    refresh-expiration: 604800000
+    issuer: ${JWT_ISSUER:LPMS-Backend}
+
+  # CORS Configuration
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:3000}
+    allowed-methods: GET,POST,PUT,PATCH,DELETE,OPTIONS
+    allowed-headers: Authorization,Content-Type,X-Requested-With,Accept,X-CSRF-TOKEN
+    exposed-headers: Authorization,X-RateLimit-Limit,X-RateLimit-Remaining,X-RateLimit-Reset,X-Total-Count,X-Page-Size,X-Current-Page,X-Total-Pages
+    allow-credentials: true
+    max-age: 3600
+
+  # File Storage Configuration
+  storage:
+    type: ${STORAGE_TYPE:local}
+    local:
+      path: ${STORAGE_LOCAL_PATH:/data/documents}
+    s3:
+      bucket: ${S3_BUCKET:}
+      region: ${S3_REGION:}
+      access-key: ${S3_ACCESS_KEY:}
+      secret-key: ${S3_SECRET_KEY:}
+
+  # AI/LLM Configuration
+  ai:
+    provider: ${LLM_PROVIDER:ollama}
+    model: ${LLM_MODEL:llama3.2}
+    base-url: ${LLM_BASE_URL:http://localhost:11434}
+    api-key: ${LLM_API_KEY:}
+    temperature: ${LLM_TEMPERATURE:0.7}
+    max-tokens: ${LLM_MAX_TOKENS:4096}
+    timeout: ${LLM_TIMEOUT:120000}
+    embedding-model: ${LLM_EMBEDDING_MODEL:nomic-embed-text}
+
+  # Rate Limiting
+  rate-limit:
+    enabled: true
+    requests-per-minute: 100
+    burst-capacity: 150
+    window-ms: 60000
+    redis:
+      key-prefix: ratelimit
+    whitelist-ips: ${RATE_LIMIT_WHITELIST:127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
+    bypass-authenticated: false
+
+  # Security Configuration
+  security:
+    allow-credentials: true
+    session-timeout: 30
+    password:
+      min-length: 12
+      require-uppercase: true
+      require-lowercase: true
+      require-number: true
+      require-special: true
+    account:
+      max-failed-attempts: 5
+      lockout-duration: 900000
+    mfa:
+      enabled: false
+      issuer: LPMS
+
+  # Multi-tenant Configuration
+  multi-tenant:
+    enabled: true
+    mode: ${MULTI_TENANT_MODE:schema}
+
+# OpenAPI/Swagger Configuration
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+    tags-sorter: alpha
+  show-actuator: false
+
+# Logging Configuration
+logging:
+  level:
+    root: INFO
+    com.company.legal: DEBUG
+    org.springframework.security: DEBUG
+    org.springframework.security.oauth2: DEBUG
+    org.springframework.web.filter: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+  security-events:
+    enabled: true
+    log-authentication-success: true
+    log-authentication-failure: true
+    log-authorization-failure: true
+    log-rate-limit-exceeded: true
+
+# Document Storage Path
+file:
+  upload:
+    dir: ${FILE_UPLOAD_DIR:/data/uploads}
+  document:
+    dir: ${DOCUMENT_DIR:/data/documents}
+
+---

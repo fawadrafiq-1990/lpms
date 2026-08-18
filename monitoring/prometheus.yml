@@ -1,0 +1,107 @@
+# Prometheus Configuration for Legal Practice Management System (LPMS)
+#
+# Scrape targets:
+#   - LPMS Backend (Java/Spring Boot) via /api/actuator/prometheus
+#   - Node Exporter (system-level metrics)
+#   - Blackbox Exporter (HTTP/TCP probing)
+#
+# Deployment:
+#   Copy to /etc/prometheus/prometheus.yml or mount as a Docker volume.
+#   Reload with: curl -X POST http://localhost:9090/-/reload
+#
+# Global settings control the default scrape behavior.
+
+global:
+  scrape_interval: 15s       # How often to scrape targets by default
+  evaluation_interval: 15s   # How often to evaluate rules
+  scrape_timeout: 10s        # Timeout per scrape request
+
+  # Labels added to all scraped samples
+  external_labels:
+    cluster: 'lpms-production'
+    environment: 'production'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - 'alertmanager:9093'
+
+# Rule files for recording and alerting rules
+rule_files:
+  - 'alerting-rules.yml'
+
+# Scrape configurations
+scrape_configs:
+  # -----------------------------------------------------------------------
+  # LPMS Backend — Spring Boot Actuator Prometheus endpoint
+  # -----------------------------------------------------------------------
+  - job_name: 'lpms-backend'
+    metrics_path: '/api/actuator/prometheus'
+    scrape_interval: 10s
+    scrape_timeout: 8s
+    static_configs:
+      - targets: ['lpms-backend:8080']
+        labels:
+          application: 'legal-management-system'
+          tier: 'backend'
+
+    # Relabeling: add instance label from __address__
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+
+  # -----------------------------------------------------------------------
+  # Node Exporter — Host-level metrics (CPU, memory, disk, network)
+  # -----------------------------------------------------------------------
+  - job_name: 'node-exporter'
+    scrape_interval: 10s
+    static_configs:
+      - targets: ['node-exporter:9100']
+        labels:
+          application: 'infrastructure'
+          component: 'node-exporter'
+
+  # -----------------------------------------------------------------------
+  # Blackbox Exporter — HTTP probe for external health checks
+  # -----------------------------------------------------------------------
+  - job_name: 'blackbox-http'
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets:
+          - 'http://lpms-frontend:3000'
+          - 'http://lpms-backend:8080/api/actuator/health'
+        labels:
+          application: 'infrastructure'
+          component: 'blackbox'
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: 'blackbox-exporter:9115'  # Blackbox exporter address
+
+  # -----------------------------------------------------------------------
+  # Kafka Exporter — Kafka cluster metrics (if deployed)
+  # -----------------------------------------------------------------------
+  - job_name: 'kafka-exporter'
+    scrape_interval: 15s
+    static_configs:
+      - targets: ['kafka-exporter:9308']
+        labels:
+          application: 'infrastructure'
+          component: 'kafka-exporter'
+
+  # -----------------------------------------------------------------------
+  # Prometheus self-monitoring
+  # -----------------------------------------------------------------------
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          application: 'infrastructure'
+          component: 'prometheus'

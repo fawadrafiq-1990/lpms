@@ -1,0 +1,140 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lpms-backend
+  namespace: lpms
+  labels:
+    app.kubernetes.io/name: lpms
+    app.kubernetes.io/component: backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: lpms
+      app.kubernetes.io/component: backend
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: lpms
+        app.kubernetes.io/component: backend
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/actuator/prometheus"
+    spec:
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: backend
+          image: lpms/backend:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: lpms-config
+            - secretRef:
+                name: lpms-secrets
+          env:
+            # Override container-aware JVM settings
+            - name: JAVA_OPTS
+              value: >-
+                -XX:+UseContainerConstraints
+                -XX:MaxRAMPercentage=75.0
+                -XX:InitialRAMPercentage=50.0
+                -XX:+UseG1GC
+                -XX:+ParallelRefProcEnabled
+                -XX:+ExitOnOutOfMemoryError
+                -Djava.security.egd=file:/dev/urandom
+                -Dfile.encoding=UTF-8
+          # Readiness probe — Spring Boot actuator readiness
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8080
+            initialDelaySeconds: 45
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          # Liveness probe — Spring Boot actuator liveness
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          # Startup probe — allows slow initial startup
+          startupProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 10
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "2000m"
+              memory: "2Gi"
+          volumeMounts:
+            - name: documents
+              mountPath: /data/documents
+            - name: uploads
+              mountPath: /data/uploads
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: documents
+          persistentVolumeClaim:
+            claimName: lpms-documents-pvc
+        - name: uploads
+          persistentVolumeClaim:
+            claimName: lpms-uploads-pvc
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi
+---
+# PersistentVolumeClaim for document storage
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: lpms-documents-pvc
+  namespace: lpms
+  labels:
+    app.kubernetes.io/name: lpms
+    app.kubernetes.io/component: backend-storage
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: standard
+---
+# PersistentVolumeClaim for uploaded files
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: lpms-uploads-pvc
+  namespace: lpms
+  labels:
+    app.kubernetes.io/name: lpms
+    app.kubernetes.io/component: backend-storage
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: standard

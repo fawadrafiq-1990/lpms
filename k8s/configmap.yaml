@@ -1,0 +1,77 @@
+###############################################################################
+# ConfigMap — LPMS application configuration (non-sensitive values)
+###############################################################################
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lpms-config
+  namespace: lpms
+  labels:
+    app.kubernetes.io/name: lpms
+    app.kubernetes.io/component: config
+data:
+  # ---------------------------------------------------------------
+  # Backend environment variables
+  # ---------------------------------------------------------------
+  SPRING_PROFILES_ACTIVE: "prod"
+  DB_HOST: "lpms-mysql.lpms.svc.cluster.local"
+  DB_PORT: "3306"
+  DB_NAME: "lpms"
+  REDIS_HOST: "lpms-redis.lpms.svc.cluster.local"
+  REDIS_PORT: "6379"
+  REDIS_DATABASE: "0"
+  KAFKA_BOOTSTRAP_SERVERS: "lpms-kafka.lpms.svc.cluster.local:9092"
+  KAFKA_GROUP_ID: "lpms-prod-group"
+  ELASTICSEARCH_URIS: "http://lpms-elasticsearch.lpms.svc.cluster.local:9200"
+  MAIL_HOST: "smtp.gmail.com"
+  MAIL_PORT: "587"
+  CORS_ALLOWED_ORIGINS: "https://lpms.example.com"
+  STORAGE_TYPE: "local"
+  STORAGE_LOCAL_PATH: "/data/documents"
+  FILE_UPLOAD_DIR: "/data/uploads"
+  DOCUMENT_DIR: "/data/documents"
+  LLM_PROVIDER: "ollama"
+  LLM_MODEL: "llama3.2"
+  LLM_BASE_URL: "http://lpms-ollama.lpms.svc.cluster.local:11434"
+  LLM_TEMPERATURE: "0.7"
+  LLM_MAX_TOKENS: "4096"
+  LLM_TIMEOUT: "120000"
+  LLM_EMBEDDING_MODEL: "nomic-embed-text"
+  MULTI_TENANT_MODE: "schema"
+  MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: "health,info,metrics,prometheus"
+  MANAGEMENT_HEALTH_PROBES_ENABLED: "true"
+
+  # ---------------------------------------------------------------
+  # MySQL configuration
+  # ---------------------------------------------------------------
+  MYSQL_DATABASE: "lpms"
+  MYSQL_CHARACTER_SET: "utf8mb4"
+  MYSQL_COLLATION: "utf8mb4_unicode_ci"
+  MYSQL_MAX_CONNECTIONS: "200"
+  MYSQL_INNODB_BUFFER_POOL_SIZE: "256M"
+
+  # ---------------------------------------------------------------
+  # Redis configuration
+  # ---------------------------------------------------------------
+  REDIS_MAXMEMORY: "256mb"
+  REDIS_MAXMEMORY_POLICY: "allkeys-lru"
+
+  # ---------------------------------------------------------------
+  # Kafka configuration
+  # ---------------------------------------------------------------
+  KAFKA_BROKER_ID: "0"
+  KAFKA_LOG_RETENTION_HOURS: "168"
+  KAFKA_NUM_PARTITIONS: "3"
+  KAFKA_ZOOKEEPER_CONNECT: "lpms-zookeeper.lpms.svc.cluster.local:2181"
+
+  # ---------------------------------------------------------------
+  # Ollama configuration
+  # ---------------------------------------------------------------
+  OLLAMA_HOST: "0.0.0.0:11434"
+  OLLAMA_KEEP_ALIVE: "240m"
+
+  # ---------------------------------------------------------------
+  # Elasticsearch configuration
+  # ---------------------------------------------------------------
+  ES_DISCOVERY_TYPE: "single-node"
+  ES_XPACK_SECURITY_ENABLED: "false"
