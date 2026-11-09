@@ -68,6 +68,9 @@ Thumbs.db
 *.pfx
 *.jks
 keystore
+# Local launcher scripts carry provider keys and must never be committed
+launch-prism.sh
+prism*.sh
 
 # Terraform
 *.tfstate
