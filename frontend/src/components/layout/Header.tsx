@@ -15,7 +15,7 @@ export default function Header() {
   const handleLogout = async () => {
     try {
       await authService.logout();
-    } catch (error) {
+    } catch {
       // Continue with logout even if API call fails
     }
     logout();

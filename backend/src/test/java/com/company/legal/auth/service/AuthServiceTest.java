@@ -1,7 +1,7 @@
 package com.company.legal.auth.service;
 
 import com.company.legal.auth.dto.*;
-import com.company.legal.auth.security.JwtTokenProvider;
+import com.company.legal.auth.service.JwtService;
 import com.company.legal.common.exception.BaseException;
 import com.company.legal.user.entity.Role;
 import com.company.legal.user.entity.User;
@@ -42,7 +42,7 @@ class AuthServiceTest {
     @Mock
     private PasswordEncoder passwordEncoder;
     @Mock
-    private JwtTokenProvider tokenProvider;
+    private JwtService jwtService;
     @Mock
     private AuthenticationManager authenticationManager;
 
@@ -86,12 +86,12 @@ class AuthServiceTest {
                     .password("password123")
                     .build();
 
-            when(userRepository.findByEmailAndDeletedAtIsNull("test@example.com"))
+            when(userRepository.findByEmail("test@example.com"))
                     .thenReturn(Optional.of(activeUser));
             when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class)))
                     .thenReturn(mockAuthentication);
-            when(tokenProvider.generateToken(mockAuthentication)).thenReturn("access-token");
-            when(tokenProvider.generateRefreshToken(activeUser)).thenReturn("refresh-token");
+            when(jwtService.generateToken(mockAuthentication)).thenReturn("access-token");
+            when(jwtService.generateRefreshToken(activeUser)).thenReturn("refresh-token");
 
             // Act
             AuthResponse response = authService.login(request);
@@ -109,8 +109,8 @@ class AuthServiceTest {
             assertThat(savedUser.getFailedLoginAttempts()).isEqualTo(0);
             assertThat(savedUser.getLastLoginAt()).isNotNull();
             verify(userRepository).save(any());
-            verify(tokenProvider).generateToken(mockAuthentication);
-            verify(tokenProvider).generateRefreshToken(activeUser);
+            verify(jwtService).generateToken(mockAuthentication);
+            verify(jwtService).generateRefreshToken(activeUser);
         }
 
         @Test
@@ -122,7 +122,7 @@ class AuthServiceTest {
                     .password("password123")
                     .build();
 
-            when(userRepository.findByEmailAndDeletedAtIsNull("nonexistent@example.com"))
+            when(userRepository.findByEmail("nonexistent@example.com"))
                     .thenReturn(Optional.empty());
 
             // Act & Assert
@@ -142,7 +142,7 @@ class AuthServiceTest {
                     .password("wrongpassword")
                     .build();
 
-            when(userRepository.findByEmailAndDeletedAtIsNull("test@example.com"))
+            when(userRepository.findByEmail("test@example.com"))
                     .thenReturn(Optional.of(activeUser));
             when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class)))
                     .thenThrow(new BadCredentialsException("Bad credentials"));
@@ -175,7 +175,7 @@ class AuthServiceTest {
                     .password("wrongpassword")
                     .build();
 
-            when(userRepository.findByEmailAndDeletedAtIsNull("test@example.com"))
+            when(userRepository.findByEmail("test@example.com"))
                     .thenReturn(Optional.of(lockedUser));
             when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class)))
                     .thenThrow(new BadCredentialsException("Bad credentials"));
@@ -211,7 +211,7 @@ class AuthServiceTest {
                     .password("password123")
                     .build();
 
-            when(userRepository.findByEmailAndDeletedAtIsNull("test@example.com"))
+            when(userRepository.findByEmail("test@example.com"))
                     .thenReturn(Optional.of(lockedUser));
 
             // Act & Assert
@@ -240,7 +240,7 @@ class AuthServiceTest {
                     .password("password123")
                     .build();
 
-            when(userRepository.findByEmailAndDeletedAtIsNull("test@example.com"))
+            when(userRepository.findByEmail("test@example.com"))
                     .thenReturn(Optional.of(inactiveUser));
 
             // Act & Assert
@@ -280,8 +280,8 @@ class AuthServiceTest {
                 user.setId("new-user-id");
                 return user;
             });
-            when(tokenProvider.generateToken(any(User.class))).thenReturn("access-token");
-            when(tokenProvider.generateRefreshToken(any(User.class))).thenReturn("refresh-token");
+            when(jwtService.generateToken(any(User.class))).thenReturn("access-token");
+            when(jwtService.generateRefreshToken(any(User.class))).thenReturn("refresh-token");
 
             // Act
             AuthResponse response = authService.register(request);
@@ -325,8 +325,8 @@ class AuthServiceTest {
                 user.setId("new-user-id");
                 return user;
             });
-            when(tokenProvider.generateToken(any(User.class))).thenReturn("access-token");
-            when(tokenProvider.generateRefreshToken(any(User.class))).thenReturn("refresh-token");
+            when(jwtService.generateToken(any(User.class))).thenReturn("access-token");
+            when(jwtService.generateRefreshToken(any(User.class))).thenReturn("refresh-token");
 
             // Act
             AuthResponse response = authService.register(request);
@@ -377,12 +377,12 @@ class AuthServiceTest {
                     .status(User.UserStatus.ACTIVE)
                     .build();
 
-            when(tokenProvider.validateToken("valid-refresh-token")).thenReturn(true);
-            when(tokenProvider.extractUsername("valid-refresh-token")).thenReturn("test@example.com");
-            when(userRepository.findByEmailAndDeletedAtIsNull("test@example.com"))
+            when(jwtService.isTokenValid("valid-refresh-token")).thenReturn(true);
+            when(jwtService.extractEmail("valid-refresh-token")).thenReturn("test@example.com");
+            when(userRepository.findByEmail("test@example.com"))
                     .thenReturn(Optional.of(user));
-            when(tokenProvider.generateToken(any(User.class))).thenReturn("new-access-token");
-            when(tokenProvider.generateRefreshToken(any(User.class))).thenReturn("new-refresh-token");
+            when(jwtService.generateToken(any(User.class))).thenReturn("new-access-token");
+            when(jwtService.generateRefreshToken(any(User.class))).thenReturn("new-refresh-token");
 
             // Act
             AuthResponse response = authService.refreshToken("valid-refresh-token");
@@ -397,23 +397,23 @@ class AuthServiceTest {
         @DisplayName("Should throw exception for invalid refresh token")
         void refreshToken_invalidToken() {
             // Arrange
-            when(tokenProvider.validateToken("invalid-token")).thenReturn(false);
+            when(jwtService.isTokenValid("invalid-token")).thenReturn(false);
 
             // Act & Assert
             assertThatThrownBy(() -> authService.refreshToken("invalid-token"))
                     .isInstanceOf(BaseException.class)
                     .hasFieldOrPropertyWithValue("errorCode", "INVALID_TOKEN");
 
-            verify(userRepository, never()).findByEmailAndDeletedAtIsNull(any());
+            verify(userRepository, never()).findByEmail(any());
         }
 
         @Test
         @DisplayName("Should throw exception when user not found")
         void refreshToken_userNotFound() {
             // Arrange
-            when(tokenProvider.validateToken("valid-token")).thenReturn(true);
-            when(tokenProvider.extractUsername("valid-token")).thenReturn("missing@example.com");
-            when(userRepository.findByEmailAndDeletedAtIsNull("missing@example.com"))
+            when(jwtService.isTokenValid("valid-token")).thenReturn(true);
+            when(jwtService.extractEmail("valid-token")).thenReturn("missing@example.com");
+            when(userRepository.findByEmail("missing@example.com"))
                     .thenReturn(Optional.empty());
 
             // Act & Assert
@@ -432,9 +432,9 @@ class AuthServiceTest {
                     .status(User.UserStatus.INACTIVE)
                     .build();
 
-            when(tokenProvider.validateToken("valid-token")).thenReturn(true);
-            when(tokenProvider.extractUsername("valid-token")).thenReturn("inactive@example.com");
-            when(userRepository.findByEmailAndDeletedAtIsNull("inactive@example.com"))
+            when(jwtService.isTokenValid("valid-token")).thenReturn(true);
+            when(jwtService.extractEmail("valid-token")).thenReturn("inactive@example.com");
+            when(userRepository.findByEmail("inactive@example.com"))
                     .thenReturn(Optional.of(inactiveUser));
 
             // Act & Assert
@@ -460,7 +460,7 @@ class AuthServiceTest {
                     .status(User.UserStatus.ACTIVE)
                     .build();
 
-            when(userRepository.findByEmailAndDeletedAtIsNull("test@example.com"))
+            when(userRepository.findByEmail("test@example.com"))
                     .thenReturn(Optional.of(user));
 
             // Act
@@ -478,7 +478,7 @@ class AuthServiceTest {
         @DisplayName("Should do nothing for non-existent user (security)")
         void forgotPassword_nonExistentUser() {
             // Arrange
-            when(userRepository.findByEmailAndDeletedAtIsNull("missing@example.com"))
+            when(userRepository.findByEmail("missing@example.com"))
                     .thenReturn(Optional.empty());
 
             // Act
@@ -507,7 +507,7 @@ class AuthServiceTest {
                     .newPassword("NewSecurePass1")
                     .build();
 
-            when(userRepository.findByEmailAndDeletedAtIsNull("test@example.com"))
+            when(userRepository.findByEmail("test@example.com"))
                     .thenReturn(Optional.of(user));
             when(passwordEncoder.encode("NewSecurePass1")).thenReturn("$2a$12$newHash");
 
@@ -535,7 +535,7 @@ class AuthServiceTest {
                     .newPassword("NewSecurePass1")
                     .build();
 
-            when(userRepository.findByEmailAndDeletedAtIsNull("missing@example.com"))
+            when(userRepository.findByEmail("missing@example.com"))
                     .thenReturn(Optional.empty());
 
             // Act & Assert
@@ -560,7 +560,7 @@ class AuthServiceTest {
                     .newPassword("NewSecurePass1")
                     .build();
 
-            when(userRepository.findByEmailAndDeletedAtIsNull("test@example.com"))
+            when(userRepository.findByEmail("test@example.com"))
                     .thenReturn(Optional.of(user));
 
             // Act & Assert
@@ -586,7 +586,7 @@ class AuthServiceTest {
                     .newPassword("NewSecurePass1")
                     .build();
 
-            when(userRepository.findByEmailAndDeletedAtIsNull("test@example.com"))
+            when(userRepository.findByEmail("test@example.com"))
                     .thenReturn(Optional.of(user));
 
             // Act & Assert
