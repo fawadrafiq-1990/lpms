@@ -1,14 +1,16 @@
 package com.company.legal.ai.providers;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import java.util.Map;
 
 /**
- * Mock LLM provider for development and testing.
+ * Mock LLM provider, selected with {@code app.ai.provider=mock} (the {@code test} profile default).
  */
 @Profile("test")
 @Component
+@ConditionalOnProperty(name = "app.ai.provider", havingValue = "mock")
 public class MockLlmProvider implements LlmProvider {
 
     @Override
@@ -19,6 +21,11 @@ public class MockLlmProvider implements LlmProvider {
     @Override
     public String chatWithContext(String prompt, String context) {
         return "[MOCK AI] Context-aware response for: " + prompt.substring(0, Math.min(30, prompt.length()));
+    }
+
+    @Override
+    public boolean isAvailable() {
+        return true;
     }
 
     @Override

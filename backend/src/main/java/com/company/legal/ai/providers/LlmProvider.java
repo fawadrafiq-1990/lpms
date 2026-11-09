@@ -12,4 +12,11 @@ public interface LlmProvider {
     int[] countTokens(String text);
     String getProviderName();
     String getDefaultModel();
+
+    /**
+     * Whether the provider can be reached right now.
+     */
+    default boolean isAvailable() {
+        return true;
+    }
 }

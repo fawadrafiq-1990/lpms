@@ -3,7 +3,6 @@ package com.company.legal.ai.service;
 import com.company.legal.ai.providers.LlmProvider;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 /**
@@ -16,14 +15,12 @@ public class AIService {
 
     private final LlmProvider llmProvider;
 
-    @Value("${app.ai.model}")
-    private String defaultModel;
-
     /**
      * Send a chat message to the AI.
      */
     public String chat(String message) {
-        log.info("AI chat request: {}", message.substring(0, Math.min(100, message.length())));
+        requireMessage(message);
+        log.info("AI chat request via {}: {}", llmProvider.getProviderName(), abbreviate(message));
         return llmProvider.chat(message);
     }
 
@@ -31,6 +28,11 @@ public class AIService {
      * Send a chat message with context.
      */
     public String chatWithContext(String message, String context) {
+        requireMessage(message);
+        if (context == null || context.isBlank()) {
+            log.warn("Context-aware AI request arrived without context; answering without it");
+            return chat(message);
+        }
         return llmProvider.chatWithContext(message, context);
     }
 
@@ -46,5 +48,22 @@ public class AIService {
      */
     public String getModel() {
         return llmProvider.getDefaultModel();
+    }
+
+    /**
+     * Whether the underlying provider is reachable right now.
+     */
+    public boolean isAvailable() {
+        return llmProvider.isAvailable();
+    }
+
+    private static void requireMessage(String message) {
+        if (message == null || message.isBlank()) {
+            throw new IllegalArgumentException("Message must not be blank");
+        }
+    }
+
+    private static String abbreviate(String message) {
+        return message.substring(0, Math.min(100, message.length()));
     }
 }
