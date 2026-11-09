@@ -1,5 +1,6 @@
 package com.company.legal.common.exception;
 
+import com.company.legal.ai.exception.AiProviderException;
 import com.company.legal.common.dto.ApiResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -90,6 +91,23 @@ public class GlobalExceptionHandler {
         log.warn("Illegal state: {}", ex.getMessage());
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(ApiResponse.error("INVALID_STATE", ex.getMessage()));
+    }
+
+    /**
+     * AI provider failures map to upstream-gateway statuses so clients can distinguish
+     * "the request was bad" (400) from "the LLM is down" (503/504/502).
+     */
+    @ExceptionHandler(AiProviderException.class)
+    public ResponseEntity<ApiResponse<Object>> handleAiProviderException(
+            AiProviderException ex) {
+        HttpStatus status = switch (ex.getErrorCode()) {
+            case "AI_PROVIDER_TIMEOUT" -> HttpStatus.GATEWAY_TIMEOUT;
+            case "AI_PROVIDER_UNAVAILABLE" -> HttpStatus.SERVICE_UNAVAILABLE;
+            default -> HttpStatus.BAD_GATEWAY;
+        };
+        log.error("AI provider failure: {} - {}", ex.getErrorCode(), ex.getMessage());
+        return ResponseEntity.status(status)
+                .body(ApiResponse.error(ex.getErrorCode(), ex.getMessage()));
     }
 
     @ExceptionHandler(BaseException.class)
